@@ -41,6 +41,7 @@ public class OrderService : IOrderService
             Id = o.Id,
             TotalAmount = o.TotalAmount,
             CreatedAt = o.CreatedAt,
+            Status = o.Status,
             Items = o.Items.Select(i => new OrderItemDto
             {
                 ProductName = i.Product.Name,
@@ -69,8 +70,40 @@ public class OrderService : IOrderService
         });
     }
 
-    public async Task<bool> UpdateStatus(int id, string status)
+    public async Task<bool> UpdateStatus(int id, string newStatus)
     {
-        return await _repo.UpdateStatus(id, status);
+        // ✅ Step 1: Validate allowed values
+        var validStatuses = new[] { "Pending", "Shipped", "Delivered", "Cancelled" };
+
+        if (!validStatuses.Contains(newStatus))
+            return false;
+
+        // ✅ Step 2: Get current order
+        var order = await _repo.GetById(id);
+
+        if (order == null)
+            return false;
+
+        var current = order.Status;
+
+        // ✅ Step 3: Define allowed transitions
+        var allowed = new Dictionary<string, List<string>>
+    {
+        { "Pending", new List<string> { "Shipped", "Cancelled" } },
+        { "Shipped", new List<string> { "Delivered" } },
+        { "Delivered", new List<string>() },
+        { "Cancelled", new List<string>() }
+    };
+
+        // ✅ Step 4: Check transition
+        if (!allowed[current].Contains(newStatus))
+            return false;
+
+        // ✅ Step 5: Update via repo
+        return await _repo.UpdateStatus(id, newStatus);
+    }
+    public async Task<bool> CancelOrder(int orderId, string userId, bool isAdmin)
+    {
+        return await _repo.CancelOrder(orderId, userId, isAdmin);
     }
 }

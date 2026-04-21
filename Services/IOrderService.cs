@@ -9,5 +9,6 @@ namespace GroceryAPI.Services
         Task<IEnumerable<OrderDto>> GetOrdersByUser(string userId);
         Task<IEnumerable<OrderDto>> GetAllOrders();
         Task<bool> UpdateStatus(int id, string status);
+        Task<bool> CancelOrder(int orderId, string userId, bool isAdmin);
     }
 }

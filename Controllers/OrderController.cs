@@ -16,12 +16,11 @@ namespace GroceryAPI.Controllers
             _service = service;
         }
         // ✅ PLACE ORDER
-        [Authorize]
+        [Authorize(Roles = "User")]
         [HttpPost]
         public async Task<IActionResult> PlaceOrder()
         {
-            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
-
+            var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             var order = await _service.PlaceOrder(userId);
 
             if (order == null)
@@ -30,11 +29,11 @@ namespace GroceryAPI.Controllers
             return Ok(order);
         }
         // 1. My Orders
-        [Authorize]
+        [Authorize(Roles = "User")]
         [HttpGet("my-orders")]
         public async Task<IActionResult> MyOrders()
         {
-            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+             var userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
             var orders = await _service.GetOrdersByUser(userId);
 
@@ -61,6 +60,23 @@ namespace GroceryAPI.Controllers
                 return NotFound();
 
             return Ok("Status Updated");
+        }
+        // 4. Cancel Order
+        [Authorize]
+        [HttpPut("cancel/{id}")]
+        public async Task<IActionResult> CancelOrder(int id)
+        {
+            var userId = User.FindFirst(ClaimTypes.Name)?.Value;
+            var role = User.FindFirst(ClaimTypes.Role)?.Value;
+
+            bool isAdmin = role == "Admin";
+
+            var result = await _service.CancelOrder(id, userId, isAdmin);
+
+            if (!result)
+                return BadRequest("Cannot cancel this order");
+
+            return Ok("Order cancelled successfully");
         }
     }
 }

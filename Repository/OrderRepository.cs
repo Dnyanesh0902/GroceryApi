@@ -22,27 +22,40 @@ namespace GroceryAPI.Repository
             if (cart == null || !cart.Items.Any())
                 return null;
 
-            var items = cart.Items.Select(x => new OrderItem
-            {
-                ProductId = x.ProductId,
-                Quantity = x.Quantity,
-                Price = x.Product.Price
-            }).ToList();
+            decimal total = 0;
+            var orderItems = new List<OrderItem>();
 
-            var total = items.Sum(x => x.Price * x.Quantity);
+            foreach (var item in cart.Items)
+            {
+                // ✅ STOCK CHECK
+                if (item.Product.Stock < item.Quantity)
+                    throw new Exception($"Not enough stock for {item.Product.Name}");
+
+                // ✅ STOCK DEDUCTION
+                item.Product.Stock -= item.Quantity;
+
+                total += item.Product.Price * item.Quantity;
+
+                orderItems.Add(new OrderItem
+                {
+                    ProductId = item.ProductId,
+                    Quantity = item.Quantity,
+                    Price = item.Product.Price
+                });
+            }
 
             var order = new Order
             {
                 UserId = userId,
                 CreatedAt = DateTime.Now,
                 TotalAmount = total,
-                Status = "Pending", // ✅ IMPORTANT
-                Items = items
+                Status = "Pending",
+                Items = orderItems
             };
 
             _context.Orders.Add(order);
 
-            // Clear cart after order
+            // ✅ CLEAR CART AFTER ORDER
             _context.CartItems.RemoveRange(cart.Items);
 
             await _context.SaveChangesAsync();
@@ -71,6 +84,12 @@ namespace GroceryAPI.Repository
         // 3. Update Status
         public async Task<bool> UpdateStatus(int id, string status)
         {
+            // ✅ VALIDATION HERE
+            var validStatuses = new[] { "Pending", "Shipped", "Delivered", "Cancelled" };
+
+            if (!validStatuses.Contains(status))
+                return false;
+
             var order = await _context.Orders.FindAsync(id);
 
             if (order == null)
@@ -79,6 +98,51 @@ namespace GroceryAPI.Repository
             order.Status = status;
 
             await _context.SaveChangesAsync();
+            return true;
+        }
+        public async Task<Order?> GetById(int id)
+        {
+            return await _context.Orders
+                .Include(o => o.Items)
+                .ThenInclude(i => i.Product)
+                .FirstOrDefaultAsync(o => o.Id == id);
+        }
+        public async Task<bool> CancelOrder(int orderId, string userId, bool isAdmin)
+        {
+            var order = await _context.Orders
+                .Include(o => o.Items)
+                .ThenInclude(i => i.Product)
+                .FirstOrDefaultAsync(o => o.Id == orderId);
+
+            if (order == null)
+                return false;
+
+            // ✅ USER OWNERSHIP CHECK (SKIP FOR ADMIN)
+            if (!isAdmin && order.UserId != userId)
+                return false;
+
+            // ❌ Cannot cancel delivered order (even admin should avoid normally, but we allow override)
+            if (!isAdmin && order.Status == "Delivered")
+                return false;
+
+            // ❌ Already cancelled
+            if (order.Status == "Cancelled")
+                return false;
+
+            // ⏰ TIME LIMIT (only for normal user)
+            if (!isAdmin && order.CreatedAt < DateTime.Now.AddHours(-2))
+                return false;
+
+            // 🔁 Restore stock
+            foreach (var item in order.Items)
+            {
+                item.Product.Stock += item.Quantity;
+            }
+
+            order.Status = "Cancelled";
+
+            await _context.SaveChangesAsync();
+
             return true;
         }
     }
