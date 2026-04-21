@@ -23,6 +23,12 @@ namespace GroceryAPI.Controllers
             await _cartService.AddToCart(userid, dto.ProductId, dto.Quantity);
             return Ok("Added To Cart");
         }
-
+        [HttpGet]
+        public async Task<IActionResult> GetCart()
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+            var cart = await _cartService.GetCart(userId);
+            return Ok(cart);
+        }
     }
 }
